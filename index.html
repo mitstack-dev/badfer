@@ -3,30 +3,784 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How's the weather?</title>
+<meta name="description" content="A hydration log and drinking-water reminder. Track intake, hit your daily goal, keep the streak.">
+<meta name="theme-color" content="#04131a">
+<title>Waterline — hydration log &amp; reminder</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%A7%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; display: grid; place-items: center;
-         min-height: 100vh; background: #0b1020; color: #e8ecf5; }
-  .card { background: #151b30; padding: 2.5rem 3rem; border-radius: 16px; text-align: center;
-          box-shadow: 0 10px 40px rgba(0,0,0,.4); }
-  h1 { margin: 0 0 .5rem; font-size: 1.6rem; }
-  .temp { font-size: 3rem; font-weight: 700; margin: .5rem 0; }
-  .muted { color: #8b95b5; font-size: .9rem; }
+  :root{
+    --ink:#04131a;
+    --ink-2:#07202b;
+    --line:rgba(126,214,224,.18);
+    --line-strong:rgba(126,214,224,.42);
+    --aqua:#5fe3d2;
+    --aqua-deep:#1c8fa8;
+    --sky:#9fe8ff;
+    --sand:#e8c98a;
+    --text:#d9f0f4;
+    --muted:#6f9aa6;
+    --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --fill:0%;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--mono);
+    font-weight:300;
+    font-size:14px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+
+  /* atmosphere: two cold light sources + a fine grid + film grain */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;
+    background:
+      radial-gradient(58vw 48vw at 8% -8%, rgba(28,143,168,.30), transparent 62%),
+      radial-gradient(46vw 40vw at 104% 108%, rgba(95,227,210,.16), transparent 60%),
+      linear-gradient(180deg,#04131a 0%,#051a23 55%,#031016 100%);
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.32;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay;
+  }
+
+  .wrap{max-width:1080px;margin:0 auto;padding:clamp(1.25rem,4vw,3rem) clamp(1rem,4vw,2.5rem) 4rem}
+
+  /* ---------- masthead ---------- */
+  header.masthead{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:clamp(1.5rem,4vw,2.75rem);
+  }
+  .eyebrow{
+    font-size:10px;letter-spacing:.34em;text-transform:uppercase;color:var(--muted);
+    display:flex;align-items:center;gap:.6rem;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--aqua);box-shadow:0 0 12px var(--aqua)}
+  h1{
+    font-family:var(--serif);font-weight:400;font-size:clamp(2.6rem,7vw,4.4rem);
+    line-height:.92;margin:.35rem 0 0;letter-spacing:-.01em;
+  }
+  h1 em{font-style:italic;color:var(--sky)}
+  .masthead .clock{font-size:11px;letter-spacing:.18em;color:var(--muted);text-align:right;text-transform:uppercase}
+  .masthead .clock b{display:block;color:var(--text);font-weight:500;font-size:13px;letter-spacing:.1em}
+
+  /* ---------- layout ---------- */
+  .grid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:clamp(1.25rem,3.5vw,2.75rem);align-items:start}
+  @media (max-width:820px){.grid{grid-template-columns:1fr}}
+
+  .rail{position:sticky;top:1.5rem}
+  @media (max-width:820px){.rail{position:static}}
+
+  .panel{
+    border:1px solid var(--line);background:rgba(7,32,43,.55);
+    backdrop-filter:blur(6px);border-radius:3px;padding:1.15rem 1.25rem;
+  }
+  .panel + .panel{margin-top:1rem}
+  .panel h2{
+    font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.3em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 .9rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem;
+  }
+  .panel h2 span{color:var(--aqua);letter-spacing:.12em}
+
+  /* ---------- the vessel ---------- */
+  .vessel-card{text-align:center;padding-top:1.6rem}
+  .vessel{
+    position:relative;width:min(210px,58vw);aspect-ratio:.62;margin:0 auto;
+    border:1px solid var(--line-strong);border-top:none;
+    border-radius:6px 6px 34px 34px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(159,232,255,.04),rgba(159,232,255,.09));
+    box-shadow:inset 0 0 40px rgba(95,227,210,.06), 0 24px 60px rgba(0,0,0,.5);
+  }
+  .vessel::after{ /* glass highlight */
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.07) 42%,transparent 52%);
+  }
+  .water{
+    position:absolute;left:0;right:0;bottom:0;height:var(--fill);
+    background:linear-gradient(180deg,var(--aqua-deep),#0a5f78 70%,#083f52);
+    transition:height .85s cubic-bezier(.22,1,.36,1);
+  }
+  .water::before,.water::after{ /* two offset wave crests riding the surface */
+    content:"";position:absolute;left:-50%;width:200%;height:22px;top:-18px;
+    background-repeat:repeat-x;background-size:50% 100%;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 22' preserveAspectRatio='none'%3E%3Cpath d='M0 12 C 20 0, 40 24, 60 12 S 100 0, 120 12 V22 H0Z' fill='%231c8fa8'/%3E%3C/svg%3E");
+    animation:drift 7s linear infinite;
+  }
+  .water::after{opacity:.45;animation-duration:11s;animation-direction:reverse;top:-22px}
+  @keyframes drift{from{transform:translateX(0)}to{transform:translateX(50%)}}
+  .ticks{position:absolute;inset:0;pointer-events:none}
+  .ticks i{
+    position:absolute;right:0;width:14px;height:1px;background:var(--line-strong);
+  }
+  .ticks i::after{
+    content:attr(data-l);position:absolute;right:18px;top:-9px;
+    font-size:9px;letter-spacing:.16em;color:var(--muted);
+  }
+  .readout{margin-top:1.35rem}
+  .readout .big{font-family:var(--serif);font-size:clamp(2.4rem,9vw,3.2rem);line-height:1;letter-spacing:-.02em}
+  .readout .big small{font-family:var(--mono);font-size:.9rem;font-weight:300;color:var(--muted);letter-spacing:.1em;margin-left:.35rem}
+  .readout .sub{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-top:.5rem}
+  .readout .sub b{color:var(--sky);font-weight:500}
+  body.goal-met .vessel{border-color:var(--aqua);box-shadow:inset 0 0 60px rgba(95,227,210,.18),0 0 46px rgba(95,227,210,.18),0 24px 60px rgba(0,0,0,.5)}
+  .stamp{
+    display:none;margin:1rem auto 0;border:1px solid var(--aqua);color:var(--aqua);
+    font-size:9px;letter-spacing:.34em;text-transform:uppercase;padding:.35rem .7rem;width:max-content;
+    transform:rotate(-2.2deg);
+  }
+  body.goal-met .stamp{display:block;animation:stampIn .5s cubic-bezier(.2,1.5,.4,1) both}
+  @keyframes stampIn{from{opacity:0;transform:rotate(-2.2deg) scale(1.5)}to{opacity:1;transform:rotate(-2.2deg) scale(1)}}
+
+  /* ---------- controls ---------- */
+  .pours{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:.6rem}
+  button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
+  .pour{
+    border:1px solid var(--line);border-radius:3px;padding:.85rem .6rem;text-align:left;
+    background:rgba(159,232,255,.03);transition:border-color .18s,background .18s,transform .18s;
+    position:relative;overflow:hidden;
+  }
+  .pour:hover,.pour:focus-visible{border-color:var(--aqua);background:rgba(95,227,210,.1);transform:translateY(-2px)}
+  .pour .ico{font-size:1.15rem;line-height:1;display:block}
+  .pour .amt{display:block;margin-top:.45rem;font-size:13px;font-weight:500;letter-spacing:.04em}
+  .pour .lbl{display:block;font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+  .pour kbd{
+    position:absolute;top:.5rem;right:.55rem;font:inherit;font-size:9px;color:var(--muted);
+    border:1px solid var(--line);border-radius:2px;padding:0 .25rem;
+  }
+
+  .row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+  input[type=number],input[type=text],select{
+    font:inherit;background:rgba(4,19,26,.8);color:var(--text);
+    border:1px solid var(--line);border-radius:3px;padding:.5rem .6rem;min-width:0;
+  }
+  input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{
+    outline:1px solid var(--aqua);outline-offset:2px;
+  }
+  .btn{
+    border:1px solid var(--line-strong);border-radius:3px;padding:.5rem .9rem;
+    font-size:10px;letter-spacing:.22em;text-transform:uppercase;
+    transition:background .18s,color .18s,border-color .18s;white-space:nowrap;
+  }
+  .btn:hover{background:var(--aqua);color:#04131a;border-color:var(--aqua)}
+  .btn.ghost{border-color:var(--line);color:var(--muted)}
+  .btn.ghost:hover{background:transparent;color:var(--text);border-color:var(--line-strong)}
+  .btn[disabled]{opacity:.35;cursor:not-allowed}
+  .btn[disabled]:hover{background:none;color:inherit;border-color:var(--line)}
+
+  /* ---------- reminder ---------- */
+  .remind{display:flex;gap:1.1rem;align-items:center;flex-wrap:wrap}
+  .dial{position:relative;width:82px;height:82px;flex:none}
+  .dial svg{transform:rotate(-90deg);display:block}
+  .dial circle{fill:none;stroke-width:3}
+  .dial .track{stroke:rgba(126,214,224,.14)}
+  .dial .prog{stroke:var(--aqua);stroke-linecap:round;transition:stroke-dashoffset .9s linear}
+  .dial .t{
+    position:absolute;inset:0;display:grid;place-items:center;text-align:center;
+    font-size:15px;font-weight:500;letter-spacing:.04em;
+  }
+  .dial.idle .prog{stroke:rgba(126,214,224,.2)}
+  .dial.idle .t{color:var(--muted);font-size:11px;letter-spacing:.16em}
+  .remind .meta{flex:1;min-width:180px}
+  .remind .meta p{margin:0 0 .6rem;color:var(--muted);font-size:11px;letter-spacing:.06em}
+
+  /* ---------- history ---------- */
+  .chart{display:flex;align-items:flex-end;gap:.5rem;height:110px;position:relative;padding-top:.5rem}
+  .chart .goalline{
+    position:absolute;left:0;right:0;border-top:1px dashed var(--line-strong);
+    font-size:9px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;
+  }
+  .chart .goalline span{position:absolute;right:0;top:-14px;background:var(--ink-2);padding-left:.4rem}
+  .bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:.4rem}
+  .bar .fill{
+    width:100%;background:linear-gradient(180deg,var(--aqua-deep),rgba(28,143,168,.35));
+    border-top:2px solid var(--aqua);border-radius:2px 2px 0 0;min-height:2px;
+    animation:grow .6s cubic-bezier(.22,1,.36,1) both;
+  }
+  .bar.met .fill{background:linear-gradient(180deg,var(--aqua),rgba(95,227,210,.3))}
+  .bar.today .fill{box-shadow:0 0 18px rgba(95,227,210,.35)}
+  .bar .day{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .bar.today .day{color:var(--sky)}
+  @keyframes grow{from{transform:scaleY(.02);opacity:.2}to{transform:scaleY(1);opacity:1}}
+  .bar .fill{transform-origin:bottom}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:3px;overflow:hidden;margin-top:1rem}
+  .stat{background:var(--ink-2);padding:.8rem .7rem;text-align:center}
+  .stat b{display:block;font-family:var(--serif);font-size:1.6rem;line-height:1.1}
+  .stat span{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+
+  /* ---------- log ---------- */
+  ul.log{list-style:none;margin:0;padding:0;max-height:230px;overflow:auto}
+  ul.log li{
+    display:flex;align-items:center;gap:.75rem;padding:.55rem 0;border-bottom:1px dotted var(--line);
+    animation:slide .3s ease both;
+  }
+  @keyframes slide{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+  ul.log li .time{font-size:11px;color:var(--muted);letter-spacing:.08em;width:64px;flex:none}
+  ul.log li .a{font-size:13px;font-weight:500;flex:1}
+  ul.log li .x{color:var(--muted);font-size:14px;line-height:1;padding:.2rem .35rem;border-radius:2px}
+  ul.log li .x:hover{color:var(--sand);background:rgba(232,201,138,.1)}
+  .empty{color:var(--muted);font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:.8rem 0}
+
+  details.settings{border-top:1px solid var(--line);margin-top:1.1rem;padding-top:.9rem}
+  details.settings summary{
+    cursor:pointer;font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);list-style:none;
+  }
+  details.settings summary::-webkit-details-marker{display:none}
+  details.settings summary::before{content:"+ ";color:var(--aqua)}
+  details.settings[open] summary::before{content:"− "}
+  details.settings .body{padding-top:.9rem;display:grid;gap:.75rem}
+  label.field{display:grid;gap:.3rem;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  label.check{display:flex;align-items:center;gap:.5rem;font-size:11px;letter-spacing:.08em;color:var(--muted);cursor:pointer}
+  label.check input{accent-color:var(--aqua);width:15px;height:15px}
+
+  /* ---------- toast ---------- */
+  #toast{
+    position:fixed;left:50%;bottom:1.5rem;transform:translate(-50%,140%);
+    border:1px solid var(--aqua);background:rgba(7,32,43,.96);color:var(--text);
+    padding:.65rem 1.1rem;border-radius:3px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    transition:transform .34s cubic-bezier(.2,1.3,.4,1),opacity .2s;z-index:20;max-width:90vw;text-align:center;
+    opacity:0;
+  }
+  #toast.show{transform:translate(-50%,0);opacity:1}
+
+  footer{
+    margin-top:2.5rem;border-top:1px solid var(--line);padding-top:1rem;
+    display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+    font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
+  }
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important}
+  }
 </style>
 </head>
 <body>
-  <div class="card">
-    <h1>How's the weather?</h1>
-    <div class="temp" id="temp">…</div>
-    <div class="muted" id="place">deployed by mitstack</div>
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Hydration log · daily edition</div>
+      <h1>Water<em>line</em></h1>
+    </div>
+    <div class="clock">
+      <b id="today-date">—</b>
+      <span id="clock-time">—</span>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- ============ LEFT RAIL: the vessel ============ -->
+    <div class="rail">
+      <section class="panel vessel-card" aria-labelledby="vessel-h">
+        <h2 id="vessel-h" class="sr">Today's intake</h2>
+        <div class="vessel">
+          <div class="water" id="water"></div>
+          <div class="ticks" aria-hidden="true">
+            <i style="bottom:75%" data-l="75"></i>
+            <i style="bottom:50%" data-l="50"></i>
+            <i style="bottom:25%" data-l="25"></i>
+          </div>
+        </div>
+
+        <div class="readout">
+          <div class="big"><span id="total">0</span><small id="unit-label">ml</small></div>
+          <div class="sub" aria-live="polite" id="remaining">start pouring</div>
+        </div>
+        <div class="stamp">Goal met — well done</div>
+      </section>
+
+      <section class="panel" aria-labelledby="stats-h">
+        <h2 id="stats-h">Record <span id="pct">0%</span></h2>
+        <div class="stats">
+          <div class="stat"><b id="stat-streak">0</b><span>Day streak</span></div>
+          <div class="stat"><b id="stat-best">0</b><span>Best streak</span></div>
+          <div class="stat"><b id="stat-avg">0</b><span>7-day avg</span></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ RIGHT COLUMN ============ -->
+    <div>
+      <section class="panel" aria-labelledby="pour-h">
+        <h2 id="pour-h">Pour <span id="goal-note">goal 2500 ml</span></h2>
+        <div class="pours" id="pours"></div>
+
+        <div class="row" style="margin-top:.85rem">
+          <label class="sr" for="custom">Custom amount</label>
+          <input type="number" id="custom" min="1" max="5000" step="10" placeholder="custom" style="width:110px" inputmode="numeric">
+          <button class="btn" id="add-custom">Add</button>
+          <button class="btn ghost" id="undo" disabled>Undo <kbd style="font:inherit">U</kbd></button>
+        </div>
+
+        <details class="settings">
+          <summary>Goal &amp; units</summary>
+          <div class="body">
+            <div class="row">
+              <label class="field" style="flex:1">Daily goal
+                <input type="number" id="goal-input" min="200" max="10000" step="50" inputmode="numeric">
+              </label>
+              <label class="field" style="flex:1">Units
+                <select id="unit-select">
+                  <option value="ml">Millilitres (ml)</option>
+                  <option value="oz">US fluid ounces (oz)</option>
+                </select>
+              </label>
+            </div>
+            <div class="row" style="align-items:flex-end">
+              <label class="field" style="flex:1">Body weight (kg)
+                <input type="number" id="weight" min="20" max="250" step="1" placeholder="70" inputmode="numeric">
+              </label>
+              <label class="field" style="flex:1">Activity
+                <select id="activity">
+                  <option value="0">Sedentary</option>
+                  <option value="350">Light (30 min)</option>
+                  <option value="700" selected>Moderate (1 hr)</option>
+                  <option value="1050">Heavy (1.5 hr+)</option>
+                </select>
+              </label>
+              <button class="btn ghost" id="calc-goal">Suggest</button>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="remind-h">
+        <h2 id="remind-h">Reminder <span id="remind-state">off</span></h2>
+        <div class="remind">
+          <div class="dial idle" id="dial">
+            <svg width="82" height="82" viewBox="0 0 82 82" aria-hidden="true">
+              <circle class="track" cx="41" cy="41" r="37"></circle>
+              <circle class="prog" cx="41" cy="41" r="37" stroke-dasharray="232.5" stroke-dashoffset="232.5"></circle>
+            </svg>
+            <div class="t" id="dial-text">off</div>
+          </div>
+          <div class="meta">
+            <p id="remind-copy">Nudge me on a timer. Uses a browser notification when the tab is in the background, and a chime plus an on-screen alert when it isn't.</p>
+            <div class="row">
+              <label class="sr" for="interval">Reminder interval</label>
+              <select id="interval">
+                <option value="20">every 20 min</option>
+                <option value="30">every 30 min</option>
+                <option value="45">every 45 min</option>
+                <option value="60" selected>every 60 min</option>
+                <option value="90">every 90 min</option>
+                <option value="120">every 2 hr</option>
+              </select>
+              <button class="btn" id="toggle-remind">Start</button>
+              <button class="btn ghost" id="snooze" disabled>Snooze 10</button>
+            </div>
+            <div class="row" style="margin-top:.7rem;gap:1rem">
+              <label class="check"><input type="checkbox" id="sound" checked> Chime</label>
+              <label class="check"><input type="checkbox" id="stop-at-goal" checked> Stop once the goal is met</label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="hist-h">
+        <h2 id="hist-h">Last 7 days</h2>
+        <div class="chart" id="chart"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="log-h">
+        <h2 id="log-h">Today's log <span id="log-count">0 pours</span></h2>
+        <ul class="log" id="log"></ul>
+        <div class="empty" id="log-empty">Nothing yet — the glass is dry.</div>
+      </section>
+    </div>
   </div>
-  <script>
-    // Open-Meteo, no API key — Berlin by default.
-    fetch("https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m")
-      .then(r => r.json())
-      .then(d => { document.getElementById("temp").textContent =
-        Math.round(d.current.temperature_2m) + "°C"; document.getElementById("place").textContent = "Berlin"; })
-      .catch(() => { document.getElementById("temp").textContent = "☁"; });
-  </script>
+
+  <footer>
+    <span>Waterline · stored on this device only</span>
+    <span>1&nbsp;–&nbsp;4 pour · U undo</span>
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var KEY = "waterline.v1";
+  var OZ = 29.5735;
+  var PRESETS = [
+    { ico: "🥛", ml: 200, label: "Glass" },
+    { ico: "☕", ml: 330, label: "Mug" },
+    { ico: "🍼", ml: 500, label: "Bottle" },
+    { ico: "🧴", ml: 750, label: "Flask" }
+  ];
+
+  var state = load();
+  var timerId = null, tickId = null, audioCtx = null, lastDay = today();
+
+  /* ---------------- storage ---------------- */
+  function defaults() {
+    return {
+      goal: 2500, unit: "ml", weight: null, activity: 700,
+      reminder: { on: false, interval: 60, nextAt: 0, sound: true, stopAtGoal: true },
+      bestStreak: 0,
+      days: {}
+    };
+  }
+  function load() {
+    var d = defaults();
+    try {
+      var raw = JSON.parse(localStorage.getItem(KEY) || "{}");
+      for (var k in d) if (Object.prototype.hasOwnProperty.call(raw, k)) d[k] = raw[k];
+      for (var r in defaults().reminder) {
+        if (!raw.reminder || raw.reminder[r] === undefined) d.reminder[r] = defaults().reminder[r];
+      }
+      if (!d.days || typeof d.days !== "object") d.days = {};
+    } catch (e) { /* corrupt or unavailable storage — start fresh */ }
+    return d;
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  /* ---------------- date helpers ---------------- */
+  function today() {
+    var n = new Date();
+    return n.getFullYear() + "-" + pad(n.getMonth() + 1) + "-" + pad(n.getDate());
+  }
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+  function dayKey(offset) {
+    var n = new Date(); n.setHours(12, 0, 0, 0); n.setDate(n.getDate() + offset);
+    return n.getFullYear() + "-" + pad(n.getMonth() + 1) + "-" + pad(n.getDate());
+  }
+  function dayEntry(key) {
+    if (!state.days[key]) state.days[key] = { total: 0, entries: [] };
+    return state.days[key];
+  }
+  function totalFor(key) { return state.days[key] ? state.days[key].total : 0; }
+
+  /* ---------------- units ---------------- */
+  function toUnit(ml) {
+    return state.unit === "oz" ? Math.round(ml / OZ * 10) / 10 : Math.round(ml);
+  }
+  function fmt(ml) { return toUnit(ml) + " " + state.unit; }
+
+  /* ---------------- actions ---------------- */
+  function addWater(ml) {
+    ml = Math.round(ml);
+    if (!isFinite(ml) || ml <= 0) return;
+    rollover();
+    var d = dayEntry(today());
+    var wasMet = d.total >= state.goal;
+    d.entries.push({ a: ml, t: Date.now() });
+    d.total += ml;
+    save(); render();
+    if (!wasMet && d.total >= state.goal) {
+      toast("Daily goal met — " + fmt(d.total));
+      chime(true);
+      if (state.reminder.on && state.reminder.stopAtGoal) stopReminder(true);
+    } else {
+      toast("+" + fmt(ml) + " logged");
+    }
+    if (state.reminder.on) scheduleNext();
+  }
+  function removeEntry(i) {
+    var d = dayEntry(today());
+    if (!d.entries[i]) return;
+    d.total = Math.max(0, d.total - d.entries[i].a);
+    d.entries.splice(i, 1);
+    save(); render();
+    toast("Entry removed");
+  }
+  function undo() {
+    var d = dayEntry(today());
+    if (!d.entries.length) return;
+    removeEntry(d.entries.length - 1);
+  }
+  function rollover() {
+    var t = today();
+    if (t !== lastDay) { lastDay = t; render(); }
+  }
+
+  /* ---------------- streaks ---------------- */
+  function streak() {
+    var n = 0, i = totalFor(dayKey(0)) >= state.goal ? 0 : 1;
+    // a streak survives a today that isn't finished yet: start counting at yesterday
+    for (; i < 400; i++) {
+      var k = dayKey(-i);
+      if (totalFor(k) >= state.goal && state.goal > 0) n++; else break;
+    }
+    return n;
+  }
+  function avg7() {
+    var s = 0, c = 0;
+    for (var i = 0; i < 7; i++) { var k = dayKey(-i); if (state.days[k]) { s += state.days[k].total; c++; } }
+    return c ? Math.round(s / c) : 0;
+  }
+
+  /* ---------------- reminder ---------------- */
+  function startReminder() {
+    state.reminder.on = true;
+    scheduleNext();
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then(function (p) {
+        toast(p === "granted" ? "Notifications on" : "Reminders will show in the page");
+      });
+    }
+    save(); render();
+  }
+  function stopReminder(quiet) {
+    state.reminder.on = false;
+    state.reminder.nextAt = 0;
+    clearInterval(tickId); tickId = null;
+    save(); render();
+    if (!quiet) toast("Reminder stopped");
+  }
+  function scheduleNext(minutes) {
+    var m = minutes || state.reminder.interval;
+    state.reminder.nextAt = Date.now() + m * 60000;
+    save();
+    if (!tickId) tickId = setInterval(tick, 1000);
+    paintDial();
+  }
+  function tick() {
+    rollover();
+    if (!state.reminder.on) return;
+    if (Date.now() >= state.reminder.nextAt) { fire(); return; }
+    paintDial();
+  }
+  function fire() {
+    var d = dayEntry(today());
+    var left = Math.max(0, state.goal - d.total);
+    var body = left > 0 ? fmt(left) + " to go today." : "You're past your goal — keep it steady.";
+    if ("Notification" in window && Notification.permission === "granted") {
+      try { new Notification("💧 Time for water", { body: body, tag: "waterline", icon: undefined }); } catch (e) {}
+    }
+    toast("Time for water — " + body);
+    if (state.reminder.sound) chime(false);
+    scheduleNext();
+  }
+  function paintDial() {
+    var dial = $("dial"), prog = dial.querySelector(".prog"), txt = $("dial-text");
+    var C = 232.5;
+    if (!state.reminder.on) {
+      dial.classList.add("idle"); prog.setAttribute("stroke-dashoffset", C); txt.textContent = "off";
+      return;
+    }
+    dial.classList.remove("idle");
+    var total = state.reminder.interval * 60000;
+    var left = Math.max(0, state.reminder.nextAt - Date.now());
+    prog.setAttribute("stroke-dashoffset", C * (1 - left / total));
+    var mins = Math.floor(left / 60000), secs = Math.floor(left % 60000 / 1000);
+    txt.textContent = mins >= 1 ? mins + "m" : secs + "s";
+  }
+  function chime(celebrate) {
+    if (!state.reminder.sound && !celebrate) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var notes = celebrate ? [660, 880, 1320] : [880, 1174];
+      notes.forEach(function (f, i) {
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain(), t0 = audioCtx.currentTime + i * 0.13;
+        o.type = "sine"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(t0); o.stop(t0 + 0.45);
+      });
+    } catch (e) { /* audio unavailable — the toast still fires */ }
+  }
+
+  /* ---------------- rendering ---------------- */
+  function $(id) { return document.getElementById(id); }
+
+  function render() {
+    var d = dayEntry(today());
+    var pct = state.goal > 0 ? Math.min(100, d.total / state.goal * 100) : 0;
+
+    document.documentElement.style.setProperty("--fill", pct.toFixed(1) + "%");
+    document.body.classList.toggle("goal-met", d.total >= state.goal && state.goal > 0);
+
+    $("total").textContent = toUnit(d.total);
+    $("unit-label").textContent = state.unit;
+    $("pct").textContent = Math.round(pct) + "%";
+    var left = state.goal - d.total;
+    $("remaining").innerHTML = left > 0
+      ? "<b>" + fmt(left) + "</b> left of " + fmt(state.goal)
+      : "goal cleared by <b>" + fmt(-left) + "</b>";
+    $("goal-note").textContent = "goal " + fmt(state.goal);
+
+    /* stats */
+    var s = streak();
+    if (s > state.bestStreak) { state.bestStreak = s; save(); }
+    $("stat-streak").textContent = s;
+    $("stat-best").textContent = state.bestStreak;
+    $("stat-avg").textContent = toUnit(avg7());
+
+    /* log */
+    var log = $("log"); log.innerHTML = "";
+    var entries = d.entries.slice().reverse();
+    entries.forEach(function (e, i) {
+      var li = document.createElement("li");
+      var idx = d.entries.length - 1 - i;
+      var t = new Date(e.t);
+      li.innerHTML = '<span class="time">' + pad(t.getHours()) + ":" + pad(t.getMinutes()) + '</span>' +
+                     '<span class="a">' + fmt(e.a) + '</span>';
+      var x = document.createElement("button");
+      x.className = "x"; x.type = "button"; x.innerHTML = "&times;";
+      x.setAttribute("aria-label", "Remove " + fmt(e.a) + " entry");
+      x.addEventListener("click", function () { removeEntry(idx); });
+      li.appendChild(x);
+      log.appendChild(li);
+    });
+    $("log-empty").style.display = entries.length ? "none" : "block";
+    $("log-count").textContent = entries.length + (entries.length === 1 ? " pour" : " pours");
+    $("undo").disabled = !entries.length;
+
+    /* chart */
+    var chart = $("chart"); chart.innerHTML = "";
+    var max = state.goal;
+    for (var i = 6; i >= 0; i--) max = Math.max(max, totalFor(dayKey(-i)));
+    var gl = document.createElement("div");
+    gl.className = "goalline";
+    gl.style.bottom = (20 + (state.goal / max) * 82) + "px";   // 20px = day label + gap
+    gl.innerHTML = "<span>goal</span>";
+    chart.appendChild(gl);
+    for (var j = 6; j >= 0; j--) {
+      var k = dayKey(-j), v = totalFor(k);
+      var bar = document.createElement("div");
+      bar.className = "bar" + (v >= state.goal && state.goal > 0 ? " met" : "") + (j === 0 ? " today" : "");
+      var h = max > 0 ? Math.max(2, v / max * 82) : 2;
+      var name = new Date(k + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" });
+      bar.innerHTML = '<div class="fill" style="height:' + h + 'px"></div><div class="day">' +
+        (j === 0 ? "today" : name) + '</div>';
+      bar.title = name + " — " + fmt(v);
+      chart.appendChild(bar);
+    }
+
+    /* reminder chrome */
+    $("remind-state").textContent = state.reminder.on ? "every " + state.reminder.interval + " min" : "off";
+    $("toggle-remind").textContent = state.reminder.on ? "Stop" : "Start";
+    $("snooze").disabled = !state.reminder.on;
+    paintDial();
+
+    /* clock */
+    var now = new Date();
+    $("today-date").textContent = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+    $("clock-time").textContent = pad(now.getHours()) + ":" + pad(now.getMinutes());
+  }
+
+  var toastId = null;
+  function toast(msg) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toastId);
+    toastId = setTimeout(function () { el.classList.remove("show"); }, 2800);
+  }
+
+  /* ---------------- wiring ---------------- */
+  function buildPours() {
+    var box = $("pours"); box.innerHTML = "";
+    PRESETS.forEach(function (p, i) {
+      var b = document.createElement("button");
+      b.className = "pour"; b.type = "button";
+      b.innerHTML = '<span class="ico" aria-hidden="true">' + p.ico + '</span>' +
+                    '<span class="amt">' + fmt(p.ml) + '</span>' +
+                    '<span class="lbl">' + p.label + '</span>' +
+                    '<kbd aria-hidden="true">' + (i + 1) + '</kbd>';
+      b.setAttribute("aria-label", "Add " + p.label + ", " + fmt(p.ml));
+      b.addEventListener("click", function () { addWater(p.ml); });
+      box.appendChild(b);
+    });
+  }
+
+  function init() {
+    buildPours();
+
+    $("goal-input").value = toUnit(state.goal);
+    $("unit-select").value = state.unit;
+    $("interval").value = state.reminder.interval;
+    $("sound").checked = state.reminder.sound;
+    $("stop-at-goal").checked = state.reminder.stopAtGoal;
+    if (state.weight) $("weight").value = state.weight;
+    $("activity").value = state.activity;
+
+    $("add-custom").addEventListener("click", function () {
+      var v = parseFloat($("custom").value);
+      if (!isFinite(v) || v <= 0) { toast("Enter an amount first"); return; }
+      addWater(state.unit === "oz" ? v * OZ : v);
+      $("custom").value = "";
+    });
+    $("custom").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); $("add-custom").click(); }
+    });
+    $("undo").addEventListener("click", undo);
+
+    $("goal-input").addEventListener("change", function () {
+      var v = parseFloat(this.value);
+      if (!isFinite(v) || v <= 0) { this.value = toUnit(state.goal); return; }
+      state.goal = Math.round(state.unit === "oz" ? v * OZ : v);
+      save(); render();
+    });
+    $("unit-select").addEventListener("change", function () {
+      state.unit = this.value === "oz" ? "oz" : "ml";
+      $("goal-input").value = toUnit(state.goal);
+      buildPours(); save(); render();
+    });
+    $("calc-goal").addEventListener("click", function () {
+      var w = parseFloat($("weight").value);
+      if (!isFinite(w) || w <= 0) { toast("Add a body weight first"); return; }
+      state.weight = w;
+      state.activity = parseInt($("activity").value, 10) || 0;
+      state.goal = Math.round((w * 33 + state.activity) / 50) * 50;   // ~33 ml/kg + activity top-up
+      $("goal-input").value = toUnit(state.goal);
+      save(); render();
+      toast("Goal set to " + fmt(state.goal));
+    });
+
+    $("interval").addEventListener("change", function () {
+      state.reminder.interval = parseInt(this.value, 10) || 60;
+      if (state.reminder.on) scheduleNext();
+      save(); render();
+    });
+    $("toggle-remind").addEventListener("click", function () {
+      if (state.reminder.on) stopReminder(); else { startReminder(); toast("Reminder every " + state.reminder.interval + " min"); }
+    });
+    $("snooze").addEventListener("click", function () { scheduleNext(10); toast("Snoozed 10 min"); });
+    $("sound").addEventListener("change", function () { state.reminder.sound = this.checked; save(); if (this.checked) chime(false); });
+    $("stop-at-goal").addEventListener("change", function () { state.reminder.stopAtGoal = this.checked; save(); });
+
+    document.addEventListener("keydown", function (e) {
+      var tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "select" || tag === "textarea" || e.metaKey || e.ctrlKey || e.altKey) return;
+      var n = parseInt(e.key, 10);
+      if (n >= 1 && n <= PRESETS.length) { addWater(PRESETS[n - 1].ml); }
+      else if (e.key === "u" || e.key === "U") { undo(); }
+    });
+
+    // day rollover + clock, checked once a minute
+    setInterval(function () { rollover(); render(); }, 60000);
+    if (state.reminder.on) {
+      if (!state.reminder.nextAt || state.reminder.nextAt < Date.now()) scheduleNext();
+      else tickId = setInterval(tick, 1000);
+    }
+
+    render();
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+</script>
 </body>
 </html>

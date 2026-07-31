@@ -1,4 +1,4 @@
-# Managed by mitstack weather-app — the "how's the weather" demo.
+# Managed by mitstack — Waterline, a static hydration-log app.
 # nginx:alpine (a C server) is used instead of caddy: the box's edge already
 # terminates TLS and reverse-proxies to this container, so the app is a plain
 # static origin — and caddy's Go binary carries HIGH Go-stdlib CVEs that the
