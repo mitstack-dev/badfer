@@ -1,6 +1,14 @@
-# Managed by mitstack — do not edit by hand (regenerated on every scaffold run).
+# Managed by mitstack — regenerated on every scaffold run.
 # Mirrors this push's delivery status (build -> gates -> deploy -> healthy) by
 # polling the mitstack-cicd dispatcher. See docs/guides/web-app-on-aws.md.
+#
+# LOCAL PATCH (see README "CI"): the generated file ships
+# MITSTACK_DELIVERY_URL_BASE empty, so the poll URL is "/delivery/..." with no
+# host, curl never connects, and every push goes red after the full 30 min
+# timeout. The base URL now comes from the repo variable
+# MITSTACK_DELIVERY_URL_BASE (same lambda the companion badfer-ci repo calls via
+# vars.MITSTACK_DISPATCH_URL). If a scaffold run regenerates this file, re-apply
+# the three marked blocks below — the repo variable itself survives.
 name: mitstack-delivery
 on:
   push:
@@ -12,7 +20,8 @@ permissions:
 
 env:
   MITSTACK_APP_ID: app_badfer_7b6e5873
-  MITSTACK_DELIVERY_URL_BASE: 
+  # PATCH 1/3 — was: MITSTACK_DELIVERY_URL_BASE: (empty)
+  MITSTACK_DELIVERY_URL_BASE: ${{ vars.MITSTACK_DELIVERY_URL_BASE }}
 
 jobs:
   follow-delivery:
@@ -23,16 +32,34 @@ jobs:
         run: |
           set -euo pipefail
 
+          # PATCH 2/3 — never burn a 30 min red on a missing dispatcher URL.
+          if [ -z "${MITSTACK_DELIVERY_URL_BASE}" ]; then
+            echo "::warning title=mitstack delivery not followed::Repo variable MITSTACK_DELIVERY_URL_BASE is unset, so there is no dispatcher to poll. Set it with: gh variable set MITSTACK_DELIVERY_URL_BASE -R ${{ github.repository }} --body <dispatcher-url>. The image build itself still ran in ${{ github.repository }}-ci."
+            exit 0
+          fi
+
           oidc_token="$(curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=mitstack-cicd-dispatcher" | jq -r '.value')"
 
           url="${MITSTACK_DELIVERY_URL_BASE}/delivery/${MITSTACK_APP_ID}/${{ github.sha }}"
           last_phase=""
+          contacted=0
           deadline=$(( $(date +%s) + 1800 ))
+          # PATCH 3/3 — if the dispatcher never answers at all, that is a mitstack
+          # config problem rather than a bad app build: say so and stop early
+          # instead of polling a dead host for half an hour.
+          contact_deadline=$(( $(date +%s) + 180 ))
 
           while [ "$(date +%s)" -lt "$deadline" ]; do
             resp="$(curl -sf -H "Authorization: Bearer ${oidc_token}" "$url" || true)"
             phase="$(printf '%s' "$resp" | jq -r '.phase // empty')"
+
+            if [ -n "$phase" ]; then
+              contacted=1
+            elif [ "$contacted" -eq 0 ] && [ "$(date +%s)" -ge "$contact_deadline" ]; then
+              echo "::warning title=mitstack delivery not followed::No response from the dispatcher at ${MITSTACK_DELIVERY_URL_BASE} after 3 min — check that MITSTACK_DELIVERY_URL_BASE and MITSTACK_APP_ID are current. The image build itself still ran in ${{ github.repository }}-ci."
+              exit 0
+            fi
 
             if [ -n "$phase" ] && [ "$phase" != "$last_phase" ]; then
               case "$phase" in

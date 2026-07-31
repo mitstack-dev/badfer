@@ -15,6 +15,27 @@ Single static page (`index.html`), served by nginx:alpine on port 8080, deployed
 
 State lives in `localStorage` on the device — no backend, no accounts, no network calls.
 
+## CI
+
+`mitstack build` (in the companion `badfer-ci` repo) builds and pushes the image; the
+`mitstack-delivery` workflow here only *follows* that delivery by polling the mitstack
+dispatcher.
+
+The generated `mitstack-delivery.yml` ships with `MITSTACK_DELIVERY_URL_BASE` empty, which
+makes it poll a hostless URL and fail after the full 30-minute timeout on every push. The
+base URL now comes from a repo variable instead:
+
+```bash
+gh variable set MITSTACK_DELIVERY_URL_BASE -R mitstack-dev/badfer \
+  --body https://lywrjyiga5dxv2lfuz4jbe5txi0wypki.lambda-url.eu-central-1.on.aws
+```
+
+That variable is repo config, so it survives scaffold regeneration — but the three blocks
+marked `PATCH n/3` in `.github/workflows/mitstack-delivery.yml` do not. If mitstack
+regenerates that file, re-apply them. The workflow now exits with a warning (not a failure)
+when the dispatcher is unset or unreachable, so a mitstack-side outage can no longer turn a
+good build red.
+
 ## Local run
 
 ```bash
